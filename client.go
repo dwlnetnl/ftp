@@ -1,5 +1,7 @@
 // Copyright (c) 2011 Ross Light.
+// Copyright (c) 2017 Anner van Hardenbroek.
 
+// Package ftp provides a minimal FTP client as defined in RFC 959.
 package ftp
 
 import (
@@ -12,10 +14,10 @@ import (
 	"strings"
 )
 
-// A Client is an FTP client.  A single FTP connection cannot handle
-// simultaneous transfers.
+// A Client is an FTP client.
+// A single FTP connection cannot handle simultaneous transfers.
 type Client struct {
-	c       net.Conn
+	conn    net.Conn
 	proto   *textproto.Conn
 	Welcome Reply
 }
@@ -30,41 +32,41 @@ func Dial(network, addr string) (*Client, error) {
 }
 
 // NewClient creates an FTP client from an existing connection.
-func NewClient(c net.Conn) (*Client, error) {
+func NewClient(conn net.Conn) (*Client, error) {
 	var err error
-	client := &Client{
-		c:     c,
-		proto: textproto.NewConn(c),
+	c := &Client{
+		conn:  conn,
+		proto: textproto.NewConn(conn),
 	}
-	client.Welcome, err = client.response()
+	c.Welcome, err = c.response()
 	if err != nil {
 		return nil, err
 	}
 
-	return client, nil
+	return c, nil
 }
 
 // Quit sends the QUIT command and closes the connection.
-func (client *Client) Quit() error {
-	if _, err := client.sendCommand("QUIT"); err != nil {
+func (c *Client) Quit() error {
+	if _, err := c.sendCommand("QUIT"); err != nil {
 		return err
 	}
-	return client.Close()
+	return c.Close()
 }
 
 // Close closes the connection.
-func (client *Client) Close() error {
-	return client.proto.Close()
+func (c *Client) Close() error {
+	return c.proto.Close()
 }
 
 // Login sends credentials to the server.
-func (client *Client) Login(username, password string) error {
-	reply, err := client.sendCommand("USER " + username)
+func (c *Client) Login(username, password string) error {
+	reply, err := c.sendCommand("USER " + username)
 	if err != nil {
 		return err
 	}
 	if reply.Code == CodeNeedPassword {
-		reply, err = client.sendCommand("PASS " + password)
+		reply, err = c.sendCommand("PASS " + password)
 		if err != nil {
 			return err
 		}
@@ -75,17 +77,17 @@ func (client *Client) Login(username, password string) error {
 	return nil
 }
 
-// Do sends a command over the control connection and waits for the response.  It returns any
-// protocol error encountered while performing the command.
-func (client *Client) Do(command string) (Reply, error) {
-	return client.sendCommand(command)
+// Do sends a command over the control connection and waits for the response.
+// It returns any protocol error encountered while performing the command.
+func (c *Client) Do(command string) (Reply, error) {
+	return c.sendCommand(command)
 }
 
 // obtainPassiveAddress returns the address to dial for a new passive data
 // connection.
-func (client *Client) obtainPassiveAddress() (*net.TCPAddr, error) {
-	if client.c.RemoteAddr().Network() == "tcp6" {
-		reply, err := client.sendCommand("EPSV")
+func (c *Client) obtainPassiveAddress() (*net.TCPAddr, error) {
+	if c.conn.RemoteAddr().Network() == "tcp6" {
+		reply, err := c.sendCommand("EPSV")
 		if err != nil {
 			return nil, err
 		} else if reply.Code != CodeExtendedPassive {
@@ -98,12 +100,12 @@ func (client *Client) obtainPassiveAddress() (*net.TCPAddr, error) {
 		}
 
 		return &net.TCPAddr{
-			IP:   client.c.RemoteAddr().(*net.TCPAddr).IP,
+			IP:   c.conn.RemoteAddr().(*net.TCPAddr).IP,
 			Port: port,
 		}, nil
 	}
 
-	reply, err := client.sendCommand("PASV")
+	reply, err := c.sendCommand("PASV")
 	if err != nil {
 		return nil, err
 	} else if reply.Code != CodePassive {
@@ -113,8 +115,8 @@ func (client *Client) obtainPassiveAddress() (*net.TCPAddr, error) {
 }
 
 // openPassive creates a new passive data connection.
-func (client *Client) openPassive() (*net.TCPConn, error) {
-	addr, err := client.obtainPassiveAddress()
+func (c *Client) openPassive() (*net.TCPConn, error) {
+	addr, err := c.obtainPassiveAddress()
 	if err != nil {
 		return nil, err
 	}
@@ -161,15 +163,15 @@ func parseEpsvReply(msg string) (port int, err error) {
 
 type transferConn struct {
 	io.ReadWriteCloser
-	client *Client
+	c *Client
 }
 
-func (conn transferConn) Close() error {
-	if err := conn.ReadWriteCloser.Close(); err != nil {
+func (tc transferConn) Close() error {
+	if err := tc.ReadWriteCloser.Close(); err != nil {
 		return err
 	}
 
-	if reply, err := conn.client.response(); err != nil {
+	if reply, err := tc.c.response(); err != nil {
 		return err
 	} else if !reply.PositiveComplete() {
 		return reply
@@ -178,16 +180,16 @@ func (conn transferConn) Close() error {
 }
 
 // transfer sends a command and opens a new passive data connection.
-func (client *Client) transfer(command, dataType string) (conn io.ReadWriteCloser, err error) {
+func (c *Client) transfer(command, dataType string) (conn io.ReadWriteCloser, err error) {
 	// Set type
-	if reply, err := client.sendCommand("TYPE " + dataType); err != nil {
+	if reply, err := c.sendCommand("TYPE " + dataType); err != nil {
 		return nil, err
 	} else if !reply.PositiveComplete() {
 		return nil, reply
 	}
 
 	// Open data connection
-	conn, err = client.openPassive()
+	conn, err = c.openPassive()
 	if err != nil {
 		return nil, err
 	}
@@ -198,35 +200,35 @@ func (client *Client) transfer(command, dataType string) (conn io.ReadWriteClose
 	}(conn)
 
 	// Send command
-	if reply, err := client.sendCommand(command); err != nil {
+	if reply, err := c.sendCommand(command); err != nil {
 		return nil, err
 	} else if !reply.Positive() {
 		return nil, reply
 	}
-	return transferConn{conn, client}, nil
+	return transferConn{conn, c}, nil
 }
 
 // Text sends a command and opens a new passive data connection in ASCII mode.
-func (client *Client) Text(command string) (io.ReadWriteCloser, error) {
-	return client.transfer(command, "A")
+func (c *Client) Text(command string) (io.ReadWriteCloser, error) {
+	return c.transfer(command, "A")
 }
 
 // Binary sends a command and opens a new passive data connection in image mode.
-func (client *Client) Binary(command string) (io.ReadWriteCloser, error) {
-	return client.transfer(command, "I")
+func (c *Client) Binary(command string) (io.ReadWriteCloser, error) {
+	return c.transfer(command, "I")
 }
 
-func (client *Client) sendCommand(command string) (Reply, error) {
-	err := client.proto.PrintfLine("%s", command)
+func (c *Client) sendCommand(command string) (Reply, error) {
+	err := c.proto.PrintfLine("%s", command)
 	if err != nil {
 		return Reply{}, err
 	}
-	return client.response()
+	return c.response()
 }
 
 // response reads a reply from the server.
-func (client *Client) response() (Reply, error) {
-	line, err := client.proto.ReadLine()
+func (c *Client) response() (Reply, error) {
+	line, err := c.proto.ReadLine()
 	if err != nil {
 		return Reply{}, err
 	} else if len(line) < 4 {
@@ -244,7 +246,7 @@ func (client *Client) response() (Reply, error) {
 		lines := []string{line[4:]}
 		endPrefix := strconv.Itoa(code) + " "
 		for {
-			line, err = client.proto.ReadLine()
+			line, err = c.proto.ReadLine()
 			if err != nil {
 				break
 			}

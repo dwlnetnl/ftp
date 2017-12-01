@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/textproto"
-	"regexp"
 	"strconv"
 	"strings"
 )

@@ -8,37 +8,6 @@ import (
 	"strings"
 )
 
-// obtainPassiveAddress returns the address to dial for a new passive data
-// connection.
-func (c *Client) obtainPassiveAddress() (*net.TCPAddr, error) {
-	if c.conn.RemoteAddr().Network() == "tcp6" {
-		reply, err := c.sendCommand("EPSV")
-		if err != nil {
-			return nil, err
-		} else if reply.Code != CodeExtendedPassive {
-			return nil, reply
-		}
-
-		port, err := parseEpsvReply(reply.Msg)
-		if err != nil {
-			return nil, err
-		}
-
-		return &net.TCPAddr{
-			IP:   c.conn.RemoteAddr().(*net.TCPAddr).IP,
-			Port: port,
-		}, nil
-	}
-
-	reply, err := c.sendCommand("PASV")
-	if err != nil {
-		return nil, err
-	} else if reply.Code != CodePassive {
-		return nil, reply
-	}
-	return parsePasvReply(reply.Msg)
-}
-
 // openPassive creates a new passive data connection.
 func (c *Client) openPassive() (*net.TCPConn, error) {
 	addr, err := c.obtainPassiveAddress()
@@ -46,6 +15,25 @@ func (c *Client) openPassive() (*net.TCPConn, error) {
 		return nil, err
 	}
 	return net.DialTCP("tcp", nil, addr)
+}
+
+// obtainPassiveAddress returns the address to dial
+// for a new passive data connection.
+func (c *Client) obtainPassiveAddress() (*net.TCPAddr, error) {
+	if c.conn.RemoteAddr().Network() == "tcp6" {
+		c.obtainPassiveAddress6()
+	}
+	return c.obtainPassiveAddress4()
+}
+
+func (c *Client) obtainPassiveAddress4() (*net.TCPAddr, error) {
+	reply, err := c.sendCommand("PASV")
+	if err != nil {
+		return nil, err
+	} else if reply.Code != CodePassive {
+		return nil, reply
+	}
+	return parsePasvReply(reply.Msg)
 }
 
 var pasvRegexp = regexp.MustCompile(`([0-9]+),([0-9]+),([0-9]+),([0-9]+),([0-9]+),([0-9]+)`)
@@ -63,6 +51,25 @@ func parsePasvReply(msg string) (*net.TCPAddr, error) {
 	return &net.TCPAddr{
 		IP:   net.IP(numbers[1:5]),
 		Port: int(numbers[5])<<8 | int(numbers[6]),
+	}, nil
+}
+
+func (c *Client) obtainPassiveAddress6() (*net.TCPAddr, error) {
+	reply, err := c.sendCommand("EPSV")
+	if err != nil {
+		return nil, err
+	} else if reply.Code != CodeExtendedPassive {
+		return nil, reply
+	}
+
+	port, err := parseEpsvReply(reply.Msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &net.TCPAddr{
+		IP:   c.conn.RemoteAddr().(*net.TCPAddr).IP,
+		Port: port,
 	}, nil
 }
 

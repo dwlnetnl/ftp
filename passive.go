@@ -1,6 +1,7 @@
 package ftp
 
 import (
+	"context"
 	"errors"
 	"net"
 	"regexp"
@@ -9,25 +10,26 @@ import (
 )
 
 // openPassive creates a new passive data connection.
-func (c *Client) openPassive() (*net.TCPConn, error) {
-	addr, err := c.obtainPassiveAddress()
+func (c *Client) openPassive(ctx context.Context) (net.Conn, error) {
+	addr, err := c.obtainPassiveAddress(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return net.DialTCP("tcp", nil, addr)
+	var d net.Dialer
+	return d.DialContext(ctx, addr.Network(), addr.String())
 }
 
 // obtainPassiveAddress returns the address to dial
 // for a new passive data connection.
-func (c *Client) obtainPassiveAddress() (*net.TCPAddr, error) {
+func (c *Client) obtainPassiveAddress(ctx context.Context) (*net.TCPAddr, error) {
 	if c.conn.RemoteAddr().Network() == "tcp6" {
-		c.obtainPassiveAddress6()
+		c.obtainPassiveAddress6(ctx)
 	}
-	return c.obtainPassiveAddress4()
+	return c.obtainPassiveAddress4(ctx)
 }
 
-func (c *Client) obtainPassiveAddress4() (*net.TCPAddr, error) {
-	reply, err := c.sendCommand("PASV")
+func (c *Client) obtainPassiveAddress4(ctx context.Context) (*net.TCPAddr, error) {
+	reply, err := c.sendCommand(ctx, "PASV")
 	if err != nil {
 		return nil, err
 	} else if reply.Code != CodePassive {
@@ -54,8 +56,8 @@ func parsePasvReply(msg string) (*net.TCPAddr, error) {
 	}, nil
 }
 
-func (c *Client) obtainPassiveAddress6() (*net.TCPAddr, error) {
-	reply, err := c.sendCommand("EPSV")
+func (c *Client) obtainPassiveAddress6(ctx context.Context) (*net.TCPAddr, error) {
+	reply, err := c.sendCommand(ctx, "EPSV")
 	if err != nil {
 		return nil, err
 	} else if reply.Code != CodeExtendedPassive {

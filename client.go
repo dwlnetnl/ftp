@@ -114,10 +114,13 @@ func (c *Client) sendCommand(ctx context.Context, command string) (Reply, error)
 		r := c.sendCmd(command)
 		return r.reply, r.err
 	}
-	result := make(chan response)
-	go c.sendCmd(command)
+	resp := make(chan response, 1)
+	go func() {
+		r, err := c.sendCmd(command)
+		resp <- response{r, err}
+	}()
 	select {
-	case r := <-result:
+	case r := <-resp:
 		return r.reply, r.err
 	case <-ctx.Done():
 		return Reply{}, ctx.Err()

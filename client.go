@@ -70,9 +70,11 @@ func (c *Client) readWelcome(ctx context.Context) (Reply, error) {
 func (c *Client) Quit(ctx context.Context) error {
 	_, err := c.sendCommand(ctx, "QUIT")
 	if err == context.Canceled || err == context.DeadlineExceeded {
-		return c.Close()
+		c.Close()
+		return nil
 	}
 	if err != nil {
+		c.Close()
 		return err
 	}
 	return c.Close()

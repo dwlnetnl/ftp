@@ -111,8 +111,7 @@ func (c *Client) Do(ctx context.Context, command string) (Reply, error) {
 
 func (c *Client) sendCommand(ctx context.Context, command string) (Reply, error) {
 	if ctx.Done() == nil {
-		r := c.sendCmd(command)
-		return r.reply, r.err
+		return c.sendCmd(command)
 	}
 	resp := make(chan response, 1)
 	go func() {
@@ -132,7 +131,7 @@ type response struct {
 	err   error
 }
 
-func (c *Client) sendCmd(command string) response {
+func (c *Client) sendCmd(command string) (Reply, error) {
 	err := c.proto.PrintfLine("%s", command)
 	if err != nil {
 		return Reply{}, err

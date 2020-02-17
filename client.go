@@ -51,11 +51,11 @@ func NewClient(ctx context.Context, conn net.Conn) (*Client, error) {
 
 func (c *Client) readWelcome(ctx context.Context) (Reply, error) {
 	if ctx.Done() == nil {
-		return c.response()
+		return c.readResponse()
 	}
 	resp := make(chan response, 1)
 	go func() {
-		r, err := c.response()
+		r, err := c.readResponse()
 		resp <- response{r, err}
 	}()
 	select {
@@ -135,14 +135,13 @@ type response struct {
 func (c *Client) sendCmd(command string) response {
 	err := c.proto.PrintfLine("%s", command)
 	if err != nil {
-		return response{err: err}
+		return Reply{}, err
 	}
-	r, err := c.response()
-	return response{r, err}
+	return c.readResponse()
 }
 
-// response reads a reply from the server.
-func (c *Client) response() (Reply, error) {
+// readResponse reads a reply from the server.
+func (c *Client) readResponse() (Reply, error) {
 	line, err := c.proto.ReadLine()
 	if err != nil {
 		return Reply{}, err

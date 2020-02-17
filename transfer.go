@@ -73,8 +73,7 @@ func (tc *transferConn) close() error {
 	if err := tc.ReadWriteCloser.Close(); err != nil {
 		return err
 	}
-
-	if reply, err := tc.c.response(); err != nil {
+	if reply, err := tc.c.readResponse(); err != nil {
 		return err
 	} else if !reply.PositiveComplete() {
 		return reply

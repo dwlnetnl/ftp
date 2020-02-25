@@ -9,28 +9,28 @@ import (
 )
 
 // Text sends a command and opens a new passive data connection in ASCII mode.
-func (c *Client) Text(ctx context.Context, command string) (io.ReadWriteCloser, error) {
+func (c *Client) Text(ctx context.Context, command string) (Reply, io.ReadWriteCloser, error) {
 	return c.transfer(ctx, command, "A")
 }
 
 // Binary sends a command and opens a new passive data connection in image mode.
-func (c *Client) Binary(ctx context.Context, command string) (io.ReadWriteCloser, error) {
+func (c *Client) Binary(ctx context.Context, command string) (Reply, io.ReadWriteCloser, error) {
 	return c.transfer(ctx, command, "I")
 }
 
 // transfer sends a command and opens a new passive data connection.
-func (c *Client) transfer(ctx context.Context, command, dataType string) (io.ReadWriteCloser, error) {
+func (c *Client) transfer(ctx context.Context, command, dataType string) (Reply, io.ReadWriteCloser, error) {
 	// Set type
 	if reply, err := c.sendCommand(ctx, "TYPE "+dataType); err != nil {
-		return nil, err
+		return Reply{}, nil, err
 	} else if !reply.PositiveComplete() {
-		return nil, reply
+		return Reply{}, nil, reply
 	}
 
 	// Open data connection
 	conn, err := c.openPassive(ctx)
 	if err != nil {
-		return nil, err
+		return Reply{}, nil, err
 	}
 	defer func(conn io.Closer) {
 		if err != nil {
@@ -39,12 +39,13 @@ func (c *Client) transfer(ctx context.Context, command, dataType string) (io.Rea
 	}(conn)
 
 	// Send command
-	if reply, err := c.sendCommand(ctx, command); err != nil {
-		return nil, err
+	reply, err := c.sendCommand(ctx, command)
+	if err != nil {
+		return Reply{}, nil, err
 	} else if !reply.Positive() {
-		return nil, reply
+		return Reply{}, nil, reply
 	}
-	return &transferConn{conn, c, ctx}, nil
+	return reply, &transferConn{conn, c, ctx}, nil
 }
 
 type transferConn struct {

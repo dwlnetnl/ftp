@@ -55,25 +55,6 @@ type transferConn struct {
 }
 
 func (tc *transferConn) Close() error {
-	if tc.ctx.Done() == nil {
-		return tc.close()
-	}
-	ch := make(chan error, 1)
-	go func() {
-		ch <- tc.close()
-	}()
-	select {
-	case err := <-ch:
-		return err
-	case <-tc.ctx.Done():
-		// close tc to read the response
-		// on the main connection (client)
-		tc.close()
-		return tc.ctx.Err()
-	}
-}
-
-func (tc *transferConn) close() error {
 	if err := tc.ReadWriteCloser.Close(); err != nil {
 		return err
 	}

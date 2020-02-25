@@ -1,5 +1,5 @@
 // Copyright (c) 2011 Ross Light.
-// Copyright (c) 2017 Anner van Hardenbroek.
+// Copyright (c) 2017, 2020 Anner van Hardenbroek.
 
 // Package ftp provides a minimal FTP client as defined in RFC 959.
 package ftp

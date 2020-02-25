@@ -1,4 +1,5 @@
 // Copyright (c) 2011 Ross Light.
+// Copyright (c) 2017, 2020 Anner van Hardenbroek.
 
 package ftp
 

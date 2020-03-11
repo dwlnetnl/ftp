@@ -49,13 +49,37 @@ func (c *Client) transfer(ctx context.Context, command, dataType string) (Reply,
 }
 
 type transferConn struct {
-	io.ReadWriteCloser
+	rwc io.ReadWriteCloser
 	c   *Client
 	ctx context.Context
 }
 
+func (tc *transferConn) Read(p []byte) (n int, err error) {
+	if tc.ctx.Done() == nil {
+		return tc.rwc.Read(p)
+	}
+	select {
+	default:
+		return tc.rwc.Read(p)
+	case <-tc.ctx.Done():
+		return 0, tc.ctx.Err()
+	}
+}
+
+func (tc *transferConn) Write(p []byte) (n int, err error) {
+	if tc.ctx.Done() == nil {
+		return tc.rwc.Write(p)
+	}
+	select {
+	default:
+		return tc.rwc.Write(p)
+	case <-tc.ctx.Done():
+		return 0, tc.ctx.Err()
+	}
+}
+
 func (tc *transferConn) Close() error {
-	if err := tc.ReadWriteCloser.Close(); err != nil {
+	if err := tc.rwc.Close(); err != nil {
 		return err
 	}
 	if reply, err := tc.c.readResponse(); err != nil {
